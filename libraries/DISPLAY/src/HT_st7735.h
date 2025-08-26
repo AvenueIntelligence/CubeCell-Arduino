@@ -15,7 +15,6 @@
 #define ST7735_MADCTL_MH  0x04
 
 /*** Redefine if necessary ***/
-
 #define ST7735_CS_Pin        GPIO7
 #define ST7735_REST_Pin      GPIO6
 #define ST7735_DC_Pin        GPIO8

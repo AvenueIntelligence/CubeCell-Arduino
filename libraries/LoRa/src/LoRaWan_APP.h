@@ -58,6 +58,7 @@ public:
   void send();
   void cycle(uint32_t dutyCycle);
   void sleep();
+  bool isTxDone();
   void setDataRateForNoADR(int8_t dataRate);
   void ifskipjoin();
   void generateDeveuiByChipID();

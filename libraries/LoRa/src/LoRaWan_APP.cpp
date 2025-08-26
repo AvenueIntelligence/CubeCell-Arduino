@@ -214,6 +214,14 @@ static void McpsConfirm( McpsConfirm_t *mcpsConfirm )
 				// Check Datarate
 				// Check TxPower
 				// Check AckReceived
+				if( mcpsConfirm->AckReceived )
+				{
+					printf("uplink acknowledged\r\n");
+				}
+				else
+				{
+					printf("uplink not acknowledged\r\n");
+				}
 				// Check NbTrials
 				break;
 			}
@@ -686,6 +694,11 @@ void LoRaWanClass::cycle(uint32_t dutyCycle)
 void LoRaWanClass::sleep()
 {
 	TimerLowPowerHandler( );
+}
+
+bool LoRaWanClass::isTxDone()
+{
+	return nextTx;
 }
 void LoRaWanClass::setDataRateForNoADR(int8_t dataRate)
 {
