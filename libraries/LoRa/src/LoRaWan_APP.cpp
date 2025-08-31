@@ -1,6 +1,8 @@
 #include <LoRaWan_APP.h>
 #include <Arduino.h>
 
+extern volatile bool g_join_attempt_finished;
+
 #if(LoraWan_RGB==1)
 #include "CubeCell_NeoPixel.h"
 CubeCell_NeoPixel pixels(1, RGB, NEO_GRB + NEO_KHZ800);
@@ -48,9 +50,6 @@ int8_t defaultDrForNoAdr = 3;
 int8_t defaultDrForNoAdr = 5;
 #endif
 
-/*AT mode, auto into low power mode*/
-bool autoLPM = true;
-
 /*loraWan current Dr when adr disabled*/
 int8_t currentDrForNoAdr;
 
@@ -92,6 +91,11 @@ bool modeLoraWan = true;
  */
 static bool nextTx = true;
 
+/*!
+ * Indicates if the last confirmed uplink was acknowledged
+ */
+static bool uplinkAcked = false;
+
 
 enum eDeviceState_LoraWan deviceState;
 
@@ -131,6 +135,7 @@ bool SendFrame( void )
 		else
 		{
 			printf("confirmed uplink sending ...\r\n");
+			uplinkAcked = false; // Reset status before sending
 			mcpsReq.Type = MCPS_CONFIRMED;
 			mcpsReq.Req.Confirmed.fPort = appPort;
 			mcpsReq.Req.Confirmed.fBuffer = appData;
@@ -166,8 +171,19 @@ static void OnTxNextPacketTimerEvent( void )
 	{
 		if( mibReq.Param.IsNetworkJoined == true )
 		{
-			deviceState = DEVICE_STATE_SEND;
-			nextTx = true;
+			if( lowpower == 0 )
+			{
+				// Device is awake, restart timer for remaining time to maintain interval
+				uint32_t elapsed = millis() - tx_start_millis;
+				uint32_t remaining = (elapsed < next_tx_interval) ? next_tx_interval - elapsed : 1000; // Min 1s
+				TimerSetValue( &TxNextPacketTimer, remaining );
+				TimerStart( &TxNextPacketTimer );
+			}
+			else
+			{
+				deviceState = DEVICE_STATE_SEND;
+				nextTx = true;
+			}
 		}
 		else
 		{
@@ -217,10 +233,12 @@ static void McpsConfirm( McpsConfirm_t *mcpsConfirm )
 				if( mcpsConfirm->AckReceived )
 				{
 					printf("uplink acknowledged\r\n");
+					uplinkAcked = true;
 				}
 				else
 				{
 					printf("uplink not acknowledged\r\n");
+					uplinkAcked = false;
 				}
 				// Check NbTrials
 				break;
@@ -307,6 +325,8 @@ void __attribute__((weak)) downLinkDataHandle(McpsIndication_t *mcpsIndication)
  */
 int revrssi;
 int revsnr;
+extern volatile bool framePendingSend;
+
 static void McpsIndication( McpsIndication_t *mcpsIndication )
 {
 	if( mcpsIndication->Status != LORAMAC_EVENT_INFO_STATUS_OK )
@@ -333,7 +353,6 @@ static void McpsIndication( McpsIndication_t *mcpsIndication )
 		case MCPS_CONFIRMED:
 		{
 			printf( "confirmed ");
-			OnTxNextPacketTimerEvent( );
 			break;
 		}
 		case MCPS_PROPRIETARY:
@@ -368,8 +387,11 @@ static void McpsIndication( McpsIndication_t *mcpsIndication )
 	if( mcpsIndication->FramePending == true )
 	{
 		// The server signals that it has pending data to be sent.
-		// We schedule an uplink as soon as possible to flush the server.
-		OnTxNextPacketTimerEvent( );
+		// We set a flag here. The main application loop will see this flag
+		// and decide when to schedule the next uplink. This decouples the
+		// callback from the main state machine and prevents race conditions.
+		framePendingSend = true;
+		// OnTxNextPacketTimerEvent( ); // DO NOT CALL - this causes a race condition.
 	}
 	// Check Buffer
 	// Check BufferSize
@@ -417,16 +439,28 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 				if(passthroughMode == false)
 				{
 					// Status is OK, node has joined the network
+					// After joining, transition to SEND to immediately send the first packet.
+					// This provides quick feedback and helps with network negotiation (ADR).
 					deviceState = DEVICE_STATE_SEND;
+					// Signal to the main application loop that the join attempt is complete.
+					g_join_attempt_finished = true;
 				}
 			}
 			else
 			{
-				uint32_t rejoin_delay = 30000;
-				printf("join failed, join again at 30s later\r\n");
-				delay(5);
-				TimerSetValue( &TxNextPacketTimer, rejoin_delay );
-				TimerStart( &TxNextPacketTimer );
+				// The join failed. The original library logic would start a 30-second
+				// timer to retry automatically. This conflicts with the application-level
+				// join backoff strategy, which implements a much longer, power-saving
+				// sleep interval. By commenting this out, we give the application
+				// full control over the join retry schedule.
+				printf("[<] MLME-Confirm: Join Failed. Status: %d\r\n", mlmeConfirm->Status);
+				// uint32_t rejoin_delay = 30000;
+				// printf("join failed, join again at 30s later\r\n");
+				// delay(5);
+				// TimerSetValue( &TxNextPacketTimer, rejoin_delay );
+				// TimerStart( &TxNextPacketTimer );
+				// Signal to the main application loop that the join attempt is complete.
+				g_join_attempt_finished = true;
 			}
 			break;
 		}
@@ -621,7 +655,7 @@ void LoRaWanClass::join()
 {
 	if( overTheAirActivation )
 	{
-		Serial.print("joining...");
+		Serial.println("\n[>] Initiating LoRaWAN join procedure with the MAC layer...");
 		MlmeReq_t mlmeReq;
 		
 		mlmeReq.Type = MLME_JOIN;
@@ -700,6 +734,12 @@ bool LoRaWanClass::isTxDone()
 {
 	return nextTx;
 }
+
+bool LoRaWanClass::isUplinkAcked()
+{
+	return uplinkAcked;
+}
+
 void LoRaWanClass::setDataRateForNoADR(int8_t dataRate)
 {
 	defaultDrForNoAdr = dataRate;
@@ -795,7 +835,7 @@ void LoRaWanClass::displayAck()
 	sprintf(temp,"rssi: %d, snr: %d ",revrssi,revsnr);
 	display.setFont(ArialMT_Plain_10);
 	display.setTextAlignment(TEXT_ALIGN_RIGHT);
-	display.drawString(128, 0, temp);
+	display.draw.drawString(128, 0, temp);
 	if(loraWanClass==CLASS_A)
 	{
 		display.setFont(ArialMT_Plain_10);

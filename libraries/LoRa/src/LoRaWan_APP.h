@@ -20,6 +20,10 @@
 #include <uart_port.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern uint8_t devEui[];
 extern uint8_t appEui[];
 extern uint8_t appKey[];
@@ -51,6 +55,10 @@ extern uint16_t userChannelsMask[6];
 
 extern enum eDeviceState_LoraWan deviceState;
 
+#ifdef __cplusplus
+}
+#endif
+
 class LoRaWanClass{
 public:
   void init(DeviceClass_t lorawanClass,LoRaMacRegion_t region);
@@ -59,6 +67,7 @@ public:
   void cycle(uint32_t dutyCycle);
   void sleep();
   bool isTxDone();
+  bool isUplinkAcked();
   void setDataRateForNoADR(int8_t dataRate);
   void ifskipjoin();
   void generateDeveuiByChipID();
@@ -82,7 +91,10 @@ extern "C" void downLinkDataHandle(McpsIndication_t *mcpsIndication);
 extern "C" void lwan_dev_params_update( void );
 extern "C" void dev_time_updated( void );
 
-
-extern LoRaWanClass LoRaWAN;
+// Extern declarations for global variables from main.cpp
+extern volatile bool g_join_attempt_finished;
+extern uint32_t tx_start_millis;
+extern uint32_t next_tx_interval;
+extern uint8_t lowpower;
 
 #endif
