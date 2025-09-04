@@ -1043,6 +1043,11 @@ void OnRadioRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
                 McpsIndication.DownLinkCounter = downLinkCounter;
                 McpsConfirm.Status = LORAMAC_EVENT_INFO_STATUS_OK;
 
+#if DEBUG
+                if (AdrAckCounter > 0) {
+                    printf("[ADR] Downlink received. Resetting AdrAckCnt from %lu to 0.\n", AdrAckCounter);
+                }
+#endif
                 AdrAckCounter = 0;
                 MacCommandsBufferToRepeatIndex = 0;
 
@@ -1491,6 +1496,9 @@ static void OnMacStateCheckTimerEvent( void )
                             // Only process the case when the MAC did not receive a downlink.
                             MacCommandsBufferIndex = 0;
                             AdrAckCounter++;
+#if DEBUG
+                            printf("[ADR] No downlink received. AdrAckCnt=%lu\n", AdrAckCounter);
+#endif
                         }
 
                         ChannelsNbRepCounter = 0;
@@ -2822,8 +2830,16 @@ LoRaMacStatus_t PrepareFrame( LoRaMacHeader_t *macHdr, LoRaMacFrameCtrl_t *fCtrl
             adrNext.TxPower = LoRaMacParams.ChannelsTxPower;
             adrNext.UplinkDwellTime = LoRaMacParams.UplinkDwellTime;
 
+#if DEBUG
+            int8_t originalDatarate = LoRaMacParams.ChannelsDatarate;
+#endif
             fCtrl->Bits.AdrAckReq = RegionAdrNext( LoRaMacRegion, &adrNext,
                                                    &LoRaMacParams.ChannelsDatarate, &LoRaMacParams.ChannelsTxPower, &AdrAckCounter );
+#if DEBUG
+            if (originalDatarate != LoRaMacParams.ChannelsDatarate) {
+                printf("[ADR] Backoff triggered. DR changed from DR%d to DR%d\n", originalDatarate, LoRaMacParams.ChannelsDatarate);
+            }
+#endif
 
             if ( SrvAckRequested == true ) {
                 SrvAckRequested = false;

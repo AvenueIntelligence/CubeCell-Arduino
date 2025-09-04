@@ -109,7 +109,11 @@
 /*!
  * ADR Ack limit
  */
+#if defined(ADR_ACK_LIMIT_OVERRIDE)
+#define US915_HYBRID_ADR_ACK_LIMIT                  ADR_ACK_LIMIT_OVERRIDE
+#else
 #define US915_HYBRID_ADR_ACK_LIMIT                  64
+#endif
 
 /*!
  * ADR Ack delay

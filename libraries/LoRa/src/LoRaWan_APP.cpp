@@ -44,7 +44,9 @@ CubeCell_NeoPixel pixels(1, RGB, NEO_GRB + NEO_KHZ800);
 #endif
 
 /*loraWan default Dr when adr disabled*/
-#ifdef REGION_US915
+#if defined(DEFAULT_DR_NO_ADR)
+int8_t defaultDrForNoAdr = DEFAULT_DR_NO_ADR;
+#elif defined(REGION_US915)
 int8_t defaultDrForNoAdr = 3;
 #else
 int8_t defaultDrForNoAdr = 5;
