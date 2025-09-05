@@ -53,7 +53,7 @@ int8_t defaultDrForNoAdr = 5;
 #endif
 
 /*loraWan current Dr when adr disabled*/
-int8_t currentDrForNoAdr;
+int8_t currentDrForNoAdr = defaultDrForNoAdr;
 
 /*!
  * User application data size
@@ -109,8 +109,6 @@ enum eDeviceState_LoraWan deviceState;
  */
 bool SendFrame( void )
 {
-	lwan_dev_params_update();
-	
 	McpsReq_t mcpsReq;
 	LoRaMacTxInfo_t txInfo;
 
@@ -121,10 +119,32 @@ bool SendFrame( void )
 		mcpsReq.Type = MCPS_UNCONFIRMED;
 		mcpsReq.Req.Unconfirmed.fBuffer = NULL;
 		mcpsReq.Req.Unconfirmed.fBufferSize = 0;
-		mcpsReq.Req.Unconfirmed.Datarate = currentDrForNoAdr;
+		mcpsReq.Req.Unconfirmed.Datarate = defaultDrForNoAdr;
 	}
 	else
 	{
+		int8_t datarate;
+		if (loraWanAdr)
+		{
+			MibRequestConfirm_t mibReq;
+			mibReq.Type = MIB_CHANNELS_DATARATE;
+			LoRaMacMibGetRequestConfirm( &mibReq );
+			datarate = mibReq.Param.ChannelsDatarate;
+
+			// After a join, the MAC's data rate may be DR0, which is too low
+			// for our initial info packet. LoRaMacQueryTxPossible has already
+			// confirmed that a higher rate is possible. We use the default DR
+			// as a safe fallback if the MAC's current DR is lower.
+			if (datarate < defaultDrForNoAdr)
+			{
+				datarate = defaultDrForNoAdr;
+			}
+		}
+		else
+		{
+			datarate = currentDrForNoAdr;
+		}
+
 		if( isTxConfirmed == false )
 		{
 			printf("unconfirmed uplink sending ...\r\n");
@@ -132,7 +152,7 @@ bool SendFrame( void )
 			mcpsReq.Req.Unconfirmed.fPort = appPort;
 			mcpsReq.Req.Unconfirmed.fBuffer = appData;
 			mcpsReq.Req.Unconfirmed.fBufferSize = appDataSize;
-			mcpsReq.Req.Unconfirmed.Datarate = currentDrForNoAdr;
+			mcpsReq.Req.Unconfirmed.Datarate = datarate;
 		}
 		else
 		{
@@ -143,7 +163,7 @@ bool SendFrame( void )
 			mcpsReq.Req.Confirmed.fBuffer = appData;
 			mcpsReq.Req.Confirmed.fBufferSize = appDataSize;
 			mcpsReq.Req.Confirmed.NbTrials = confirmedNbTrials;
-			mcpsReq.Req.Confirmed.Datarate = currentDrForNoAdr;
+			mcpsReq.Req.Confirmed.Datarate = datarate;
 		}
 	}
 //#ifdef __asr6601__
@@ -173,19 +193,8 @@ static void OnTxNextPacketTimerEvent( void )
 	{
 		if( mibReq.Param.IsNetworkJoined == true )
 		{
-			if( lowpower == 0 )
-			{
-				// Device is awake, restart timer for remaining time to maintain interval
-				uint32_t elapsed = millis() - tx_start_millis;
-				uint32_t remaining = (elapsed < next_tx_interval) ? next_tx_interval - elapsed : 1000; // Min 1s
-				TimerSetValue( &TxNextPacketTimer, remaining );
-				TimerStart( &TxNextPacketTimer );
-			}
-			else
-			{
-				deviceState = DEVICE_STATE_SEND;
-				nextTx = true;
-			}
+			deviceState = DEVICE_STATE_SEND;
+			nextTx = true;
 		}
 		else
 		{
@@ -253,6 +262,7 @@ static void McpsConfirm( McpsConfirm_t *mcpsConfirm )
 				break;
 		}
 	}
+	deviceState = DEVICE_STATE_CYCLE;
 	nextTx = true;
 }
 
@@ -441,9 +451,11 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 				if(passthroughMode == false)
 				{
 					// Status is OK, node has joined the network
-					// After joining, transition to SEND to immediately send the first packet.
-					// This provides quick feedback and helps with network negotiation (ADR).
-					deviceState = DEVICE_STATE_SEND;
+					// Do not send immediately. Instead, transition to the CYCLE state to allow
+					// the LoRaWAN stack to process the join-accept and apply network settings
+					// before the first data uplink. This prevents a race condition where the
+					// device might transmit on an incorrect channel.
+					deviceState = DEVICE_STATE_CYCLE;
 					// Signal to the main application loop that the join attempt is complete.
 					g_join_attempt_finished = true;
 				}
@@ -627,6 +639,9 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region)
 	LoRaMacCallback.GetBatteryLevel = BoardGetBatteryLevel;
 	LoRaMacCallback.GetTemperatureLevel = NULL;
 	LoRaMacInitialization( &LoRaMacPrimitive, &LoRaMacCallback,region);
+	
+	currentDrForNoAdr = defaultDrForNoAdr;
+
 	TimerStop( &TxNextPacketTimer );
 	TimerInit( &TxNextPacketTimer, OnTxNextPacketTimerEvent );
 
@@ -637,8 +652,6 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region)
 	mibReq.Type = MIB_PUBLIC_NETWORK;
 	mibReq.Param.EnablePublicNetwork = LORAWAN_PUBLIC_NETWORK;
 	LoRaMacMibSetRequestConfirm( &mibReq );
-
-	lwan_dev_params_update();
 
 	mibReq.Type = MIB_DEVICE_CLASS;
 	LoRaMacMibGetRequestConfirm( &mibReq );
