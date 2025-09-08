@@ -755,6 +755,19 @@ bool LoRaWanClass::isUplinkAcked()
 	return uplinkAcked;
 }
 
+uint8_t LoRaWanClass::getMaxPayloadSize()
+{
+  LoRaMacTxInfo_t txInfo;
+  // A dummy size of 1 is passed; LoRaMacQueryTxPossible populates txInfo
+  // with the max payload size for the current data rate.
+  if (LoRaMacQueryTxPossible(1, &txInfo) == LORAMAC_STATUS_OK) {
+    return txInfo.MaxPossiblePayload;
+  }
+  // If the query fails, return a safe, conservative value.
+  // 11 bytes is the minimum for US915 DR0. Other regions have similar minimums.
+  return 11;
+}
+
 void LoRaWanClass::setDataRateForNoADR(int8_t dataRate)
 {
 	defaultDrForNoAdr = dataRate;
