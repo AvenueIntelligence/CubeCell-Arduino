@@ -103,6 +103,12 @@ static int8_t LimitTxPower( int8_t txPower, int8_t maxBandTxPower, int8_t datara
     // Limit tx power to the band max
     txPowerResult =  MAX( txPower, maxBandTxPower );
 
+#ifdef TX_POWER_CAP_INDEX
+    // If a power cap is defined via build flags, unconditionally apply it.
+    // This provides a global safety override.
+    txPowerResult = MAX( txPower, TX_POWER_CAP_INDEX );
+#else
+    // Original vendor logic
     if( datarate == DR_4 )
     {// Limit tx power to max 26dBm
         txPowerResult = MAX( txPower, TX_POWER_2 );
@@ -110,10 +116,11 @@ static int8_t LimitTxPower( int8_t txPower, int8_t maxBandTxPower, int8_t datara
     else
     {
         if( RegionCommonCountChannels( channelsMask, 0, 4 ) < 50 )
-        {// Limit tx power to max 21dBm
+        { // Limit tx power to max 21dBm
             txPowerResult = MAX( txPower, TX_POWER_5 );
         }
     }
+#endif
     return txPowerResult;
 }
 

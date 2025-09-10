@@ -2,6 +2,7 @@
 #include <Arduino.h>
 
 extern volatile bool g_join_attempt_finished;
+extern volatile bool g_tx_timer_expired;
 
 #if(LoraWan_RGB==1)
 #include "CubeCell_NeoPixel.h"
@@ -193,7 +194,7 @@ static void OnTxNextPacketTimerEvent( void )
 	{
 		if( mibReq.Param.IsNetworkJoined == true )
 		{
-			deviceState = DEVICE_STATE_SEND;
+			g_tx_timer_expired = true;
 			nextTx = true;
 		}
 		else
@@ -455,7 +456,7 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 					// the LoRaWAN stack to process the join-accept and apply network settings
 					// before the first data uplink. This prevents a race condition where the
 					// device might transmit on an incorrect channel.
-					deviceState = DEVICE_STATE_CYCLE;
+					deviceState = DEVICE_STATE_SEND;
 					// Signal to the main application loop that the join attempt is complete.
 					g_join_attempt_finished = true;
 				}

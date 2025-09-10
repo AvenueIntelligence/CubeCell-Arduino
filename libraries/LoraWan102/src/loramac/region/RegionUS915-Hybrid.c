@@ -137,17 +137,30 @@ static int8_t LimitTxPower( int8_t txPower, int8_t maxBandTxPower, int8_t datara
     // Limit tx power to the band max
     txPowerResult =  MAX( txPower, maxBandTxPower );
 
+#if defined(TX_POWER_CAP_INDEX)
+    // Unconditionally cap the TX power to the index specified in the build flags.
+    // This is a custom modification to ensure the device never exceeds its
+    // physical hardware limits, regardless of what the regional settings or
+    // network commands dictate.
+    txPowerResult = MAX( txPowerResult, TX_POWER_CAP_INDEX );
+#else
+    // Original vendor logic
     if( datarate == DR_4 )
     {// Limit tx power to max 26dBm
-        txPowerResult = MAX( txPower, TX_POWER_2 );
+        txPowerResult = MAX( txPowerResult, TX_POWER_2 );
     }
     else
     {
+        // Per FCC 15.247, output power limitations are relaxed when using > 50 channels.
+        // This original logic is flawed if the network enables all channels, as it allows
+        // the device to transmit above its physical hardware limits.
+        // NOTE: The function RegionCommonCountChannels is defined in RegionCommon.c
         if( RegionCommonCountChannels( channelsMask, 0, 4 ) < 50 )
-        {// Limit tx power to max 21dBm
-            txPowerResult = MAX( txPower, TX_POWER_5 );
+        { // Limit tx power to max 21dBm
+            txPowerResult = MAX( txPowerResult, TX_POWER_5 );
         }
     }
+#endif
     return txPowerResult;
 }
 
