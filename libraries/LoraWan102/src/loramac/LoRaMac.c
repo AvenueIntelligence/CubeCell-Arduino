@@ -312,6 +312,11 @@ static LoRaMacPrimitives_t *LoRaMacPrimitives;
 static LoRaMacCallback_t *LoRaMacCallbacks;
 
 /*!
+ * LoRaMac context pointer
+ */
+static void* LoRaMacContext;
+
+/*!
  * Radio events function pointer
  */
 static RadioEvents_t RadioEvents;
@@ -1608,13 +1613,13 @@ static void OnMacStateCheckTimerEvent( void )
         if( LoRaMacFlags.Bits.McpsReq == 1 )
         {
             LoRaMacFlags.Bits.McpsReq = 0;
-            LoRaMacPrimitives->MacMcpsConfirm( &McpsConfirm );
+            LoRaMacPrimitives->MacMcpsConfirm( &McpsConfirm, LoRaMacContext );
         }
 
         if( LoRaMacFlags.Bits.MlmeReq == 1 )
         {
             LoRaMacFlags.Bits.MlmeReq = 0;
-            LoRaMacConfirmQueueHandleCb( &MlmeConfirm );
+            LoRaMacConfirmQueueHandleCb( &MlmeConfirm, LoRaMacContext );
             if( LoRaMacConfirmQueueGetCnt( ) > 0 )
             {
                 LoRaMacFlags.Bits.MlmeReq = 1;
@@ -1624,7 +1629,7 @@ static void OnMacStateCheckTimerEvent( void )
         // Handle MLME indication
         if( LoRaMacFlags.Bits.MlmeInd == 1 )
         {
-            LoRaMacPrimitives->MacMlmeIndication( &MlmeIndication );
+            LoRaMacPrimitives->MacMlmeIndication( &MlmeIndication, LoRaMacContext );
             LoRaMacFlags.Bits.MlmeInd = 0;
 
 #ifdef CONFIG_LWAN
@@ -1637,7 +1642,7 @@ static void OnMacStateCheckTimerEvent( void )
         if( IsStickyMacCommandPending( ) == true )
         {// Setup MLME indication
             SetMlmeScheduleUplinkIndication( );
-            LoRaMacPrimitives->MacMlmeIndication( &MlmeIndication );
+            LoRaMacPrimitives->MacMlmeIndication( &MlmeIndication, LoRaMacContext );
             LoRaMacFlags.Bits.MlmeInd = 0;
 #ifdef CONFIG_LWAN
             if(MlmeIndication.MlmeIndication == MLME_SCHEDULE_UPLINK) {
@@ -1668,7 +1673,7 @@ static void OnMacStateCheckTimerEvent( void )
         }
         if( LoRaMacFlags.Bits.McpsIndSkip == 0 )
         {
-            LoRaMacPrimitives->MacMcpsIndication( &McpsIndication );
+            LoRaMacPrimitives->MacMcpsIndication( &McpsIndication, LoRaMacContext );
         }
         LoRaMacFlags.Bits.McpsIndSkip = 0;
     }
@@ -3051,7 +3056,7 @@ LoRaMacStatus_t SetTxContinuousWave1( uint16_t timeout, uint32_t frequency, uint
 }
 
 LoRaMacStatus_t LoRaMacInitialization( LoRaMacPrimitives_t *primitives, LoRaMacCallback_t *callbacks,
-                                       LoRaMacRegion_t region )
+                                       LoRaMacRegion_t region, void* context )
 {
     GetPhyParams_t getPhy;
     PhyParam_t phyParam;
@@ -3079,6 +3084,7 @@ LoRaMacStatus_t LoRaMacInitialization( LoRaMacPrimitives_t *primitives, LoRaMacC
     LoRaMacPrimitives = primitives;
     LoRaMacCallbacks = callbacks;
     LoRaMacRegion = region;
+    LoRaMacContext = context;
 
     LoRaMacFlags.Value = 0;
 

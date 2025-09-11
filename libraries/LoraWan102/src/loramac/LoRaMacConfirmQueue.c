@@ -239,7 +239,7 @@ bool LoRaMacConfirmQueueIsCmdActive( Mlme_t request )
     return false;
 }
 
-void LoRaMacConfirmQueueHandleCb( MlmeConfirm_t* mlmeConfirm )
+void LoRaMacConfirmQueueHandleCb( MlmeConfirm_t* mlmeConfirm, void* context )
 {
     uint8_t nbElements = MlmeConfirmQueueCnt;
     bool readyToHandle = false;
@@ -253,7 +253,7 @@ void LoRaMacConfirmQueueHandleCb( MlmeConfirm_t* mlmeConfirm )
 
         if( readyToHandle == true )
         {
-            Primitives->MacMlmeConfirm( mlmeConfirm );
+            Primitives->MacMlmeConfirm( mlmeConfirm, context );
         }
         else
         {

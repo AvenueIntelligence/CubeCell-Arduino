@@ -59,9 +59,16 @@ extern enum eDeviceState_LoraWan deviceState;
 }
 #endif
 
+struct AppCallbacks {
+    void (*onTxComplete)(bool ackReceived);
+    void (*onJoinFinished)(bool success);
+    void (*onTxTimerExpired)();
+    void (*onMacRequest)(); // For FramePending
+};
+
 class LoRaWanClass{
 public:
-  void init(DeviceClass_t lorawanClass,LoRaMacRegion_t region);
+  void init(DeviceClass_t lorawanClass,LoRaMacRegion_t region, AppCallbacks* callbacks);
   void join();
   void send();
   void cycle(uint32_t dutyCycle);
@@ -80,6 +87,8 @@ public:
   void displayAck();
   void displayMcuInit();
 #endif
+private:
+  AppCallbacks* callbacks;
 };
 
 
@@ -93,7 +102,6 @@ extern "C" void lwan_dev_params_update( void );
 extern "C" void dev_time_updated( void );
 
 // Extern declarations for global variables from main.cpp
-extern volatile bool g_join_attempt_finished;
 extern uint32_t tx_start_millis;
 extern uint32_t next_tx_interval;
 extern uint8_t lowpower;

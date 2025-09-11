@@ -144,8 +144,9 @@ bool LoRaMacConfirmQueueIsCmdActive( Mlme_t request );
  * \brief   Handles all callbacks of active requests
  *
  * \param   [IN] mlmeConfirm - Pointer to the generic mlmeConfirm structure.
+ * \param   [IN] context     - Pointer to a user-defined context.
  */
-void LoRaMacConfirmQueueHandleCb( MlmeConfirm_t* mlmeConfirm );
+void LoRaMacConfirmQueueHandleCb( MlmeConfirm_t* mlmeConfirm, void* context );
 
 /*!
  * \brief   Query number of elements in the queue.

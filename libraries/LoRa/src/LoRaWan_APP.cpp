@@ -1,8 +1,7 @@
-#include <LoRaWan_APP.h>
+#include "LoRaWan_APP.h"
 #include <Arduino.h>
 
-extern volatile bool g_join_attempt_finished;
-extern volatile bool g_tx_timer_expired;
+static AppCallbacks* AppCallbacksPtr = NULL;
 
 #if(LoraWan_RGB==1)
 #include "CubeCell_NeoPixel.h"
@@ -194,27 +193,15 @@ static void OnTxNextPacketTimerEvent( void )
 	{
 		if( mibReq.Param.IsNetworkJoined == true )
 		{
-			g_tx_timer_expired = true;
+			if (AppCallbacksPtr && AppCallbacksPtr->onTxTimerExpired) {
+				AppCallbacksPtr->onTxTimerExpired();
+			}
 			nextTx = true;
 		}
 		else
 		{
-			// Network not joined yet. Try to join again
-			MlmeReq_t mlmeReq;
-			mlmeReq.Type = MLME_JOIN;
-			mlmeReq.Req.Join.DevEui = devEui;
-			mlmeReq.Req.Join.AppEui = appEui;
-			mlmeReq.Req.Join.AppKey = appKey;
-			mlmeReq.Req.Join.NbTrials = 1;
-
-			if( LoRaMacMlmeRequest( &mlmeReq ) == LORAMAC_STATUS_OK )
-			{
-				deviceState = DEVICE_STATE_SLEEP;
-			}
-			else
-			{
-				deviceState = DEVICE_STATE_CYCLE;
-			}
+			// If not joined, do nothing. The main application is responsible for
+			// managing the join retry strategy with a power-saving long sleep.
 		}
 	}
 }
@@ -225,8 +212,9 @@ static void OnTxNextPacketTimerEvent( void )
  * \param   [IN] mcpsConfirm - Pointer to the confirm structure,
  *               containing confirm attributes.
  */
-static void McpsConfirm( McpsConfirm_t *mcpsConfirm )
+static void McpsConfirm( McpsConfirm_t *mcpsConfirm, void* context )
 {
+	AppCallbacks* callbacks = (AppCallbacks*)context;
 	if( mcpsConfirm->Status == LORAMAC_EVENT_INFO_STATUS_OK )
 	{
 		switch( mcpsConfirm->McpsRequest )
@@ -263,7 +251,10 @@ static void McpsConfirm( McpsConfirm_t *mcpsConfirm )
 				break;
 		}
 	}
-	deviceState = DEVICE_STATE_CYCLE;
+
+	if (callbacks && callbacks->onTxComplete) {
+		callbacks->onTxComplete(uplinkAcked);
+	}
 	nextTx = true;
 }
 
@@ -338,10 +329,10 @@ void __attribute__((weak)) downLinkDataHandle(McpsIndication_t *mcpsIndication)
  */
 int revrssi;
 int revsnr;
-extern volatile bool framePendingSend;
 
-static void McpsIndication( McpsIndication_t *mcpsIndication )
+static void McpsIndication( McpsIndication_t *mcpsIndication, void* context )
 {
+	AppCallbacks* callbacks = (AppCallbacks*)context;
 	if( mcpsIndication->Status != LORAMAC_EVENT_INFO_STATUS_OK )
 	{
 		return;
@@ -400,10 +391,12 @@ static void McpsIndication( McpsIndication_t *mcpsIndication )
 	if( mcpsIndication->FramePending == true )
 	{
 		// The server signals that it has pending data to be sent.
-		// We set a flag here. The main application loop will see this flag
-		// and decide when to schedule the next uplink. This decouples the
-		// callback from the main state machine and prevents race conditions.
-		framePendingSend = true;
+		// We signal this to the application, which will decide when to
+		// schedule the next uplink. This decouples the callback from the main
+		// state machine and prevents race conditions.
+		if (callbacks && callbacks->onMacRequest) {
+			callbacks->onMacRequest();
+		}
 		// OnTxNextPacketTimerEvent( ); // DO NOT CALL - this causes a race condition.
 	}
 	// Check Buffer
@@ -427,8 +420,9 @@ void __attribute__((weak)) dev_time_updated()
  * \param   [IN] mlmeConfirm - Pointer to the confirm structure,
  *               containing confirm attributes.
  */
-static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
+static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm, void* context )
 {
+	AppCallbacks* callbacks = (AppCallbacks*)context;
 	switch( mlmeConfirm->MlmeRequest )
 	{
 		case MLME_JOIN:
@@ -456,9 +450,11 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 					// the LoRaWAN stack to process the join-accept and apply network settings
 					// before the first data uplink. This prevents a race condition where the
 					// device might transmit on an incorrect channel.
-					deviceState = DEVICE_STATE_SEND;
+					// deviceState = DEVICE_STATE_SEND; // REMOVED
 					// Signal to the main application loop that the join attempt is complete.
-					g_join_attempt_finished = true;
+					if (callbacks && callbacks->onJoinFinished) {
+						callbacks->onJoinFinished(true);
+					}
 				}
 			}
 			else
@@ -475,7 +471,9 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 				// TimerSetValue( &TxNextPacketTimer, rejoin_delay );
 				// TimerStart( &TxNextPacketTimer );
 				// Signal to the main application loop that the join attempt is complete.
-				g_join_attempt_finished = true;
+				if (callbacks && callbacks->onJoinFinished) {
+						callbacks->onJoinFinished(false);
+				}
 			}
 			break;
 		}
@@ -507,7 +505,7 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
  *
  * \param   [IN] mlmeIndication - Pointer to the indication structure.
  */
-static void MlmeIndication( MlmeIndication_t *mlmeIndication )
+static void MlmeIndication( MlmeIndication_t *mlmeIndication, void* context )
 {
 	switch( mlmeIndication->MlmeIndication )
 	{
@@ -585,8 +583,10 @@ void LoRaWanClass::generateDeveuiByChipID()
 }
 
 
-void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region)
+void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region, AppCallbacks* callbacks)
 {
+	this->callbacks = callbacks;
+	AppCallbacksPtr = callbacks;
 	Serial.print("\r\nLoRaWAN ");
 	switch(region)
 	{
@@ -639,7 +639,7 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region)
 	LoRaMacPrimitive.MacMlmeIndication = MlmeIndication;
 	LoRaMacCallback.GetBatteryLevel = BoardGetBatteryLevel;
 	LoRaMacCallback.GetTemperatureLevel = NULL;
-	LoRaMacInitialization( &LoRaMacPrimitive, &LoRaMacCallback,region);
+	LoRaMacInitialization( &LoRaMacPrimitive, &LoRaMacCallback,region, callbacks);
 	
 	currentDrForNoAdr = defaultDrForNoAdr;
 
@@ -663,7 +663,8 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region)
 		LoRaMacMibSetRequestConfirm( &mibReq );
 	}
 
-	deviceState = DEVICE_STATE_JOIN;
+	// The application's state machine is responsible for setting the initial state.
+	// deviceState = DEVICE_STATE_JOIN;
 }
 
 
@@ -672,6 +673,20 @@ void LoRaWanClass::join()
 	if( overTheAirActivation )
 	{
 		Serial.println("\n[>] Initiating LoRaWAN join procedure with the MAC layer...");
+
+		// Per Task 20, programmatically reset the channel mask to the regional
+		// default before initiating a join. This mimics the behavior of the
+		// known-good master firmware, which uses a narrow channel plan (<50
+		// channels) for joins, allowing it to hit a safe code path in the
+		// vendor's power-limiting logic.
+		MibRequestConfirm_t mibReq;
+		mibReq.Type = MIB_CHANNELS_DEFAULT_MASK;
+		mibReq.Param.ChannelsMask = userChannelsMask;
+		LoRaMacMibSetRequestConfirm(&mibReq);
+		mibReq.Type = MIB_CHANNELS_MASK;
+		mibReq.Param.ChannelsMask = userChannelsMask;
+		LoRaMacMibSetRequestConfirm(&mibReq);
+		
 		MlmeReq_t mlmeReq;
 		
 		mlmeReq.Type = MLME_JOIN;
@@ -681,14 +696,10 @@ void LoRaWanClass::join()
 		mlmeReq.Req.Join.AppKey = appKey;
 		mlmeReq.Req.Join.NbTrials = 1;
 
-		if( LoRaMacMlmeRequest( &mlmeReq ) == LORAMAC_STATUS_OK )
-		{
-			deviceState = DEVICE_STATE_SLEEP;
-		}
-		else
-		{
-			deviceState = DEVICE_STATE_CYCLE;
-		}
+		// This function only initiates the join request. The application's state
+		// machine will handle the result, which is delivered asynchronously via
+		// the MlmeConfirm callback.
+		LoRaMacMlmeRequest( &mlmeReq );
 	}
 	else
 	{
@@ -714,7 +725,9 @@ void LoRaWanClass::join()
 		mibReq.Param.IsNetworkJoined = true;
 		LoRaMacMibSetRequestConfirm( &mibReq );
 		
-		deviceState = DEVICE_STATE_SEND;
+		// For ABP, we are joined by definition. The application state machine
+		// will proceed to send.
+		// deviceState = DEVICE_STATE_SEND;
 	}
 }
 
@@ -803,7 +816,7 @@ void LoRaWanClass::ifskipjoin()
 		getDevParam();
 #endif
 
-		init(loraWanClass,loraWanRegion);
+		init(loraWanClass,loraWanRegion, this->callbacks);
 		getNetInfo();
 		if(passthroughMode==false){
 			Serial.println("User key not detected,Use reserved Net");

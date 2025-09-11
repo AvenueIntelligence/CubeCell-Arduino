@@ -2185,26 +2185,30 @@ typedef struct sLoRaMacPrimitives {
      * \brief   MCPS-Confirm primitive
      *
      * \param   [OUT] MCPS-Confirm parameters
+     * \param   [IN] context     - Pointer to a user-defined context.
      */
-    void ( *MacMcpsConfirm )( McpsConfirm_t *McpsConfirm );
+    void ( *MacMcpsConfirm )( McpsConfirm_t *McpsConfirm, void* context );
     /*!
      * \brief   MCPS-Indication primitive
      *
      * \param   [OUT] MCPS-Indication parameters
+     * \param   [IN] context     - Pointer to a user-defined context.
      */
-    void ( *MacMcpsIndication )( McpsIndication_t *McpsIndication );
+    void ( *MacMcpsIndication )( McpsIndication_t *McpsIndication, void* context );
     /*!
      * \brief   MLME-Confirm primitive
      *
      * \param   [OUT] MLME-Confirm parameters
+     * \param   [IN] context     - Pointer to a user-defined context.
      */
-    void ( *MacMlmeConfirm )( MlmeConfirm_t *MlmeConfirm );
+    void ( *MacMlmeConfirm )( MlmeConfirm_t *MlmeConfirm, void* context );
     /*!
      * \brief   MLME-Indication primitive
      *
      * \param   [OUT] MLME-Indication parameters
+     * \param   [IN] context     - Pointer to a user-defined context.
      */
-    void ( *MacMlmeIndication )( MlmeIndication_t *MlmeIndication );
+    void ( *MacMlmeIndication )( MlmeIndication_t *MlmeIndication, void* context );
 } LoRaMacPrimitives_t;
 
 /*!
@@ -2256,9 +2260,10 @@ static const uint8_t LoRaMacMaxEirpTable[] = { 8, 10, 12, 13, 14, 16, 18, 20, 21
  *          \ref LORAMAC_STATUS_OK,
  *          \ref LORAMAC_STATUS_PARAMETER_INVALID,
  *          \ref LORAMAC_STATUS_REGION_NOT_SUPPORTED.
+ * \param   [IN] context    - Pointer to a user-defined context.
  */
 LoRaMacStatus_t LoRaMacInitialization( LoRaMacPrimitives_t *primitives, LoRaMacCallback_t *callbacks,
-                                       LoRaMacRegion_t region );
+                                       LoRaMacRegion_t region, void* context );
 
 /*!
  * \brief   Queries the LoRaMAC if it is possible to send the next frame with

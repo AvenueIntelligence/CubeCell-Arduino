@@ -103,11 +103,10 @@ static int8_t LimitTxPower( int8_t txPower, int8_t maxBandTxPower, int8_t datara
     // Limit tx power to the band max
     txPowerResult =  MAX( txPower, maxBandTxPower );
 
-#ifdef TX_POWER_CAP_INDEX
-    // If a power cap is defined via build flags, unconditionally apply it.
-    // This provides a global safety override.
-    txPowerResult = MAX( txPower, TX_POWER_CAP_INDEX );
-#else
+    uint8_t channelCount = RegionCommonCountChannels( channelsMask, 0, 4 );
+#if DEBUG
+    printf( "[d] [TX POWER] Input pwr index: %d, dr: %d, 125kHz channels: %u\n", txPower, datarate, channelCount );
+#endif
     // Original vendor logic
     if( datarate == DR_4 )
     {// Limit tx power to max 26dBm
@@ -115,11 +114,13 @@ static int8_t LimitTxPower( int8_t txPower, int8_t maxBandTxPower, int8_t datara
     }
     else
     {
-        if( RegionCommonCountChannels( channelsMask, 0, 4 ) < 50 )
+        if( channelCount < 50 )
         { // Limit tx power to max 21dBm
             txPowerResult = MAX( txPower, TX_POWER_5 );
         }
     }
+#if DEBUG
+    printf( "[d] [TX POWER] Final pwr index: %d\n", txPowerResult );
 #endif
     return txPowerResult;
 }
