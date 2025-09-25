@@ -501,7 +501,7 @@ bool RegionUS915AdrNext( AdrNextParams_t* adrNext, int8_t* drOut, int8_t* txPowO
             }
             if( adrNext->AdrAckCounter >= ( US915_ADR_ACK_LIMIT + US915_ADR_ACK_DELAY ) )
             {
-                if( ( adrNext->AdrAckCounter % US915_ADR_ACK_DELAY ) == 1 )
+                if( ( adrNext->AdrAckCounter % US915_ADR_ACK_DELAY ) == (US915_ADR_ACK_LIMIT % US915_ADR_ACK_DELAY) )
                 {
                     // Decrease the datarate
                     getPhy.Attribute = PHY_NEXT_LOWER_TX_DR;

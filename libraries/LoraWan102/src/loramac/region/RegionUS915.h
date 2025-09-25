@@ -114,12 +114,19 @@
 /*!
  * ADR Ack limit
  */
+#if defined(ADR_ACK_LIMIT_OVERRIDE)
+#define US915_ADR_ACK_LIMIT                  ADR_ACK_LIMIT_OVERRIDE
+#else
 #define US915_ADR_ACK_LIMIT                         64
-
+#endif
 /*!
  * ADR Ack delay
  */
+#if defined(ADR_ACK_DELAY_OVERRIDE)
+#define US915_ADR_ACK_DELAY                  ADR_ACK_DELAY_OVERRIDE
+#else
 #define US915_ADR_ACK_DELAY                         32
+#endif
 
 /*!
  * Enabled or disabled the duty cycle
