@@ -76,6 +76,7 @@ public:
   bool isTxDone();
   bool isUplinkAcked();
   uint8_t getMaxPayloadSize();
+  void setAdrEnabled(bool enabled);
   void setDataRateForNoADR(int8_t dataRate);
   void ifskipjoin();
   void generateDeveuiByChipID();

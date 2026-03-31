@@ -785,6 +785,31 @@ uint8_t LoRaWanClass::getMaxPayloadSize()
 void LoRaWanClass::setDataRateForNoADR(int8_t dataRate)
 {
 	defaultDrForNoAdr = dataRate;
+	currentDrForNoAdr = dataRate;
+	if( loraWanAdr == false )
+	{
+		MibRequestConfirm_t mibReq;
+		mibReq.Type = MIB_CHANNELS_DATARATE;
+		mibReq.Param.ChannelsDatarate = currentDrForNoAdr;
+		LoRaMacMibSetRequestConfirm( &mibReq );
+	}
+}
+
+void LoRaWanClass::setAdrEnabled(bool enabled)
+{
+	loraWanAdr = enabled;
+
+	MibRequestConfirm_t mibReq;
+	mibReq.Type = MIB_ADR;
+	mibReq.Param.AdrEnable = loraWanAdr;
+	LoRaMacMibSetRequestConfirm( &mibReq );
+
+	if( loraWanAdr == false )
+	{
+		mibReq.Type = MIB_CHANNELS_DATARATE;
+		mibReq.Param.ChannelsDatarate = currentDrForNoAdr;
+		LoRaMacMibSetRequestConfirm( &mibReq );
+	}
 }
 
 void LoRaWanClass::ifskipjoin()
@@ -909,4 +934,3 @@ void LoRaWanClass::displayMcuInit()
 #endif
 
 LoRaWanClass LoRaWAN;
-
