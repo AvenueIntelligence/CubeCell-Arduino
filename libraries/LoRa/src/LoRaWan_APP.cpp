@@ -1,6 +1,12 @@
 #include "LoRaWan_APP.h"
 #include <Arduino.h>
 
+#if DEBUG
+#define LORAWAN_APP_DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define LORAWAN_APP_DEBUG_PRINTF(...) do {} while (0)
+#endif
+
 static AppCallbacks* AppCallbacksPtr = NULL;
 
 #if(LoraWan_RGB==1)
@@ -115,7 +121,7 @@ bool SendFrame( void )
 	if( LoRaMacQueryTxPossible( appDataSize, &txInfo ) != LORAMAC_STATUS_OK )
 	{
 		// Send empty frame in order to flush MAC commands
-		printf("payload length error ...\r\n");
+		LORAWAN_APP_DEBUG_PRINTF("payload length error ...\r\n");
 		mcpsReq.Type = MCPS_UNCONFIRMED;
 		mcpsReq.Req.Unconfirmed.fBuffer = NULL;
 		mcpsReq.Req.Unconfirmed.fBufferSize = 0;
@@ -147,7 +153,7 @@ bool SendFrame( void )
 
 		if( isTxConfirmed == false )
 		{
-			printf("unconfirmed uplink sending ...\r\n");
+			LORAWAN_APP_DEBUG_PRINTF("unconfirmed uplink sending ...\r\n");
 			mcpsReq.Type = MCPS_UNCONFIRMED;
 			mcpsReq.Req.Unconfirmed.fPort = appPort;
 			mcpsReq.Req.Unconfirmed.fBuffer = appData;
@@ -156,7 +162,7 @@ bool SendFrame( void )
 		}
 		else
 		{
-			printf("confirmed uplink sending ...\r\n");
+			LORAWAN_APP_DEBUG_PRINTF("confirmed uplink sending ...\r\n");
 			uplinkAcked = false; // Reset status before sending
 			mcpsReq.Type = MCPS_CONFIRMED;
 			mcpsReq.Req.Confirmed.fPort = appPort;
@@ -232,12 +238,12 @@ static void McpsConfirm( McpsConfirm_t *mcpsConfirm, void* context )
 				// Check AckReceived
 				if( mcpsConfirm->AckReceived )
 				{
-					printf("uplink acknowledged\r\n");
+					LORAWAN_APP_DEBUG_PRINTF("uplink acknowledged\r\n");
 					uplinkAcked = true;
 				}
 				else
 				{
-					printf("uplink not acknowledged\r\n");
+					LORAWAN_APP_DEBUG_PRINTF("uplink not acknowledged\r\n");
 					uplinkAcked = false;
 				}
 				// Check NbTrials
@@ -312,6 +318,7 @@ void __attribute__((weak)) downLinkAckHandle()
 
 void __attribute__((weak)) downLinkDataHandle(McpsIndication_t *mcpsIndication)
 {
+#if DEBUG
 	printf("+REV DATA:%s,RXSIZE %d,PORT %d\r\n",mcpsIndication->RxSlot?"RXWIN2":"RXWIN1",mcpsIndication->BufferSize,mcpsIndication->Port);
 	printf("+REV DATA:");
 	for(uint8_t i=0;i<mcpsIndication->BufferSize;i++)
@@ -319,6 +326,9 @@ void __attribute__((weak)) downLinkDataHandle(McpsIndication_t *mcpsIndication)
 		printf("%02X",mcpsIndication->Buffer[i]);
 	}
 	printf("\r\n");
+#else
+	(void)mcpsIndication;
+#endif
 }
 
 /*!
@@ -346,6 +356,7 @@ static void McpsIndication( McpsIndication_t *mcpsIndication, void* context )
 	turnOnRGB(COLOR_RECEIVED, 200);
 	turnOffRGB();
 #endif
+#if DEBUG
 	printf( "received ");
 	switch( mcpsIndication->McpsIndication )
 	{
@@ -373,6 +384,7 @@ static void McpsIndication( McpsIndication_t *mcpsIndication, void* context )
 			break;
 	}
 	printf( "downlink: rssi = %d, snr = %d, datarate = %d\r\n", mcpsIndication->Rssi, (int)mcpsIndication->Snr,(int)mcpsIndication->RxDoneDatarate);
+#endif
 
 	if(mcpsIndication->AckReceived)
 	{
@@ -411,7 +423,7 @@ static void McpsIndication( McpsIndication_t *mcpsIndication, void* context )
 
 void __attribute__((weak)) dev_time_updated()
 {
-	printf("device time updated\r\n");
+	LORAWAN_APP_DEBUG_PRINTF("device time updated\r\n");
 }
 
 /*!
@@ -440,7 +452,7 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm, void* context )
 					LoRaWAN.displayJoined();
 				}
 #endif
-				printf("joined\r\n");
+				LORAWAN_APP_DEBUG_PRINTF("joined\r\n");
 				
 				//in PassthroughMode,do nothing while joined
 				if(passthroughMode == false)
@@ -464,7 +476,7 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm, void* context )
 				// join backoff strategy, which implements a much longer, power-saving
 				// sleep interval. By commenting this out, we give the application
 				// full control over the join retry schedule.
-				printf("[<] MLME-Confirm: Join Failed. Status: %d\r\n", mlmeConfirm->Status);
+				LORAWAN_APP_DEBUG_PRINTF("[<] MLME-Confirm: Join Failed. Status: %d\r\n", mlmeConfirm->Status);
 				// uint32_t rejoin_delay = 30000;
 				// printf("join failed, join again at 30s later\r\n");
 				// delay(5);
@@ -587,6 +599,7 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region, AppCa
 {
 	this->callbacks = callbacks;
 	AppCallbacksPtr = callbacks;
+#if DEBUG
 	Serial.print("\r\nLoRaWAN ");
 	switch(region)
 	{
@@ -628,6 +641,7 @@ void LoRaWanClass::init(DeviceClass_t lorawanClass,LoRaMacRegion_t region, AppCa
 	}
 
 	Serial.printf(" Class %X start!\r\n\r\n",loraWanClass+10);
+#endif
 
 	if(region == LORAMAC_REGION_AS923_AS1 || region == LORAMAC_REGION_AS923_AS2)
 		region = LORAMAC_REGION_AS923;
@@ -672,7 +686,9 @@ void LoRaWanClass::join()
 {
 	if( overTheAirActivation )
 	{
+#if DEBUG
 		Serial.println("\n[>] Initiating LoRaWAN join procedure with the MAC layer...");
+#endif
 
 		// Per Task 20, programmatically reset the channel mask to the regional
 		// default before initiating a join. This mimics the behavior of the
@@ -816,10 +832,14 @@ void LoRaWanClass::ifskipjoin()
 {
 //if saved net info is OK in lorawan mode, skip join.
 	if(checkNetInfo()&&modeLoraWan){
+#if DEBUG
 		Serial.println();
+#endif
 		if(passthroughMode==false)
 		{
+#if DEBUG
 			Serial.println("Wait 3s for user key to rejoin network");
+#endif
 			uint16_t i=0;
 			pinMode(USER_KEY,INPUT);
 			while(i<=3000)
@@ -844,17 +864,23 @@ void LoRaWanClass::ifskipjoin()
 		init(loraWanClass,loraWanRegion, this->callbacks);
 		getNetInfo();
 		if(passthroughMode==false){
+#if DEBUG
 			Serial.println("User key not detected,Use reserved Net");
+#endif
 		}
 		else{
+#if DEBUG
 			Serial.println("Use reserved Net");
+#endif
 		}
 		if(passthroughMode==false)
 		{
 			int32_t temp=randr(0,appTxDutyCycle);
+#if DEBUG
 			Serial.println();
 			Serial.printf("Next packet send %d ms later(random time from 0 to APP_TX_DUTYCYCLE)\r\n",temp);
 			Serial.println();
+#endif
 			cycle(temp);//send packet in a random time to avoid network congestion.
 		}
 		deviceState = DEVICE_STATE_SLEEP;
