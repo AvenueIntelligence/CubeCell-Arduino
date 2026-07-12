@@ -62,6 +62,10 @@ TimerTime_t mcps_start_time;
  * never reuse one from the restored session.
  */
 #define LORA_MAC_UPLINK_COUNTER_RESERVATION_SIZE    256U
+#define LORA_MAC_NETWORK_INFO_FLAGS_ADDRESS         0x0001FE00U
+#define LORA_MAC_KEEP_NET_ADDRESS                   0x0001FE5DU
+#define LORA_MAC_NETWORK_INFO_INITIALIZED           0x01U
+#define LORA_MAC_NETWORK_SESSION_VALID               0x02U
 
 /*!
  * LoRaMac region.
@@ -182,6 +186,19 @@ uint32_t DownLinkCounter = 0;
  * UpLinkCounter value
  */
 static bool IsUpLinkCounterFixed = false;
+
+static void MarkNetworkSessionValid( void )
+{
+    uint8_t flags = 0;
+    uint8_t keepNetEnabled = 1;
+
+    FLASH_read_at( LORA_MAC_NETWORK_INFO_FLAGS_ADDRESS, &flags, sizeof( flags ) );
+    flags |= LORA_MAC_NETWORK_INFO_INITIALIZED |
+             LORA_MAC_NETWORK_SESSION_VALID;
+    FLASH_update( LORA_MAC_NETWORK_INFO_FLAGS_ADDRESS, &flags, sizeof( flags ) );
+    FLASH_update( LORA_MAC_KEEP_NET_ADDRESS, &keepNetEnabled,
+                  sizeof( keepNetEnabled ) );
+}
 
 static void ReserveUpLinkCounterBlock( void )
 {
@@ -1513,6 +1530,7 @@ static void OnMacStateCheckTimerEvent( void )
                         // Node joined successfully
                         UpLinkCounter = 0;
                         ReserveUpLinkCounterBlock( );
+                        MarkNetworkSessionValid( );
                         #ifdef CONFIG_LORA_VERIFY
                         if (g_lora_debug)
                             PRINTF_RAW("Join done, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
