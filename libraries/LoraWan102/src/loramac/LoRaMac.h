@@ -2410,6 +2410,14 @@ LoRaMacStatus_t LoRaMacMibGetRequestConfirm( MibRequestConfirm_t *mibGet );
 LoRaMacStatus_t LoRaMacMibSetRequestConfirm( MibRequestConfirm_t *mibSet );
 
 /*!
+ * Reserve the next block of uplink frame counters in nonvolatile storage.
+ *
+ * This must be called after restoring a saved session and before transmitting.
+ * The live counter is unchanged; only the future resume boundary is advanced.
+ */
+void LoRaMacReserveUpLinkCounterBlock( void );
+
+/*!
  * \brief   LoRaMAC MLME-Request
  *
  * \details The Mac layer management entity handles management services. The

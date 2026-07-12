@@ -57,6 +57,13 @@ TimerTime_t mcps_start_time;
 #define LORA_MAC_COMMAND_MAX_FOPTS_LENGTH           15
 
 /*!
+ * Number of uplink counters reserved in flash at a time. The persisted value
+ * is always ahead of the live counter, so a reset may skip counters but can
+ * never reuse one from the restored session.
+ */
+#define LORA_MAC_UPLINK_COUNTER_RESERVATION_SIZE    256U
+
+/*!
  * LoRaMac region.
  */
 LoRaMacRegion_t LoRaMacRegion;
@@ -175,6 +182,33 @@ uint32_t DownLinkCounter = 0;
  * UpLinkCounter value
  */
 static bool IsUpLinkCounterFixed = false;
+
+static void ReserveUpLinkCounterBlock( void )
+{
+    uint32_t liveCounter = UpLinkCounter;
+
+    if( IsUpLinkCounterFixed == true )
+    {
+        return;
+    }
+    if( liveCounter > ( UINT32_MAX - LORA_MAC_UPLINK_COUNTER_RESERVATION_SIZE ) )
+    {
+        return;
+    }
+
+    UpLinkCounter = liveCounter + LORA_MAC_UPLINK_COUNTER_RESERVATION_SIZE;
+    saveUpCnt( );
+    UpLinkCounter = liveCounter;
+}
+
+static void IncrementUpLinkCounter( void )
+{
+    UpLinkCounter++;
+    if( ( UpLinkCounter % LORA_MAC_UPLINK_COUNTER_RESERVATION_SIZE ) == 0U )
+    {
+        ReserveUpLinkCounterBlock( );
+    }
+}
 
 /*!
  * Used for test purposes. Disables the opening of the reception windows.
@@ -1478,6 +1512,7 @@ static void OnMacStateCheckTimerEvent( void )
                     if( LoRaMacConfirmQueueGetStatus( MLME_JOIN ) == LORAMAC_EVENT_INFO_STATUS_OK ) {
                         // Node joined successfully
                         UpLinkCounter = 0;
+                        ReserveUpLinkCounterBlock( );
                         #ifdef CONFIG_LORA_VERIFY
                         if (g_lora_debug)
                             PRINTF_RAW("Join done, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
@@ -1509,8 +1544,7 @@ static void OnMacStateCheckTimerEvent( void )
                         ChannelsNbRepCounter = 0;
 
                         if ( IsUpLinkCounterFixed == false ) {
-                            UpLinkCounter++;
-                            //SaveUpCnt();
+                            IncrementUpLinkCounter( );
                             #ifdef CONFIG_LORA_VERIFY
                             if (g_lora_debug)
                                 PRINTF_RAW("Unconfirmed data, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
@@ -1533,8 +1567,7 @@ static void OnMacStateCheckTimerEvent( void )
                 AckTimeoutRetry = false;
                 NodeAckRequested = false;
                 if ( IsUpLinkCounterFixed == false ) {
-                    UpLinkCounter++;
-                    //SaveUpCnt();
+                    IncrementUpLinkCounter( );
                 #ifdef CONFIG_LORA_VERIFY
                 if (g_lora_debug)
                     PRINTF_RAW("Confirmed data received ACK, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
@@ -1579,8 +1612,7 @@ static void OnMacStateCheckTimerEvent( void )
                     McpsConfirm.NbRetries = AckTimeoutRetriesCounter;
                     McpsConfirm.Datarate = LoRaMacParams.ChannelsDatarate;
                     if ( IsUpLinkCounterFixed == false ) {
-                        UpLinkCounter++;
-                        //SaveUpCnt();
+                        IncrementUpLinkCounter( );
                         #ifdef CONFIG_LORA_VERIFY
                         if (g_lora_debug)
                             PRINTF_RAW("Confirmed data can't send after decrease DR, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
@@ -1597,7 +1629,7 @@ static void OnMacStateCheckTimerEvent( void )
                 McpsConfirm.AckReceived = false;
                 McpsConfirm.NbRetries = AckTimeoutRetriesCounter;
                 if ( IsUpLinkCounterFixed == false ) {
-                    UpLinkCounter++;
+                    IncrementUpLinkCounter( );
                     #ifdef CONFIG_LORA_VERIFY
                     if (g_lora_debug)
                         PRINTF_RAW("Confirmed data exceed retry times, UpLinkCounter:%u\r\n", (unsigned int)UpLinkCounter);
@@ -3723,6 +3755,11 @@ LoRaMacStatus_t LoRaMacMibSetRequestConfirm( MibRequestConfirm_t *mibSet )
     }
 
     return status;
+}
+
+void LoRaMacReserveUpLinkCounterBlock( void )
+{
+    ReserveUpLinkCounterBlock( );
 }
 
 LoRaMacStatus_t LoRaMacChannelAdd( uint8_t id, ChannelParams_t params )
