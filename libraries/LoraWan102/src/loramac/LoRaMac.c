@@ -3491,11 +3491,11 @@ LoRaMacStatus_t LoRaMacMibGetRequestConfirm( MibRequestConfirm_t *mibGet )
             mibGet->Param.AntennaGain = LoRaMacParams.AntennaGain;
             break;
         }
-#ifdef CONFIG_LWAN
         case MIB_RX1_DATARATE_OFFSET: {
             mibGet->Param.Rx1DrOffset = LoRaMacParams.Rx1DrOffset;
             break;
         }
+#ifdef CONFIG_LWAN
         case MIB_MAC_STATE: {
             mibGet->Param.LoRaMacState = LoRaMacState;
             break;
@@ -3745,12 +3745,10 @@ LoRaMacStatus_t LoRaMacMibSetRequestConfirm( MibRequestConfirm_t *mibSet )
             status = LoRaMacMulticastChannelUnlink(mibSet->Param.MulticastList);
             break;
         }
-#ifdef CONFIG_LWAN
         case MIB_RX1_DATARATE_OFFSET: {
             LoRaMacParams.Rx1DrOffset = mibSet->Param.Rx1DrOffset;
             break;
         }
-#endif
 
 #ifdef CONFIG_LINKWAN
         case MIB_FREQ_BAND: {
